@@ -22,9 +22,20 @@ import random
 import mathutils
 from object_print3d_utils import mesh_helpers
 import array
+import os
+
 
 def strVector3( v3 ):
     return str(v3.x) + "," + str(v3.y) + "," + str(v3.z)
+
+
+def save_obj_file(main_intersect_dataset_folder, is_intersecting_faces, idx):
+    blend_file_path = main_intersect_dataset_folder + "\\" + str(is_intersecting_faces) + "\\"
+    file_path = os.path.dirname(blend_file_path)
+    target_file = os.path.join(file_path, "{:03d}.obj".format(idx))
+    bpy.ops.export_scene.obj(filepath=target_file)
+    os.remove(os.path.join(file_path, "{:03d}.mtl".format(idx)))
+
 
 def detect_intersection(obj):
     """
@@ -42,35 +53,40 @@ def detect_intersection(obj):
     faces_error = {i for i_pair in overlap for i in i_pair}
     return array.array('i', faces_error)
 
-# create a new cube
-bpy.ops.mesh.primitive_ico_sphere_add()
 
-# newly created cube will be automatically selected
-ico = bpy.context.selected_objects[0]
-# change name
-ico.name = "ico"
+num_of_iterations = 50
+main_intersect_dataset_folder = "D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\Intersect"
+dirs = [main_intersect_dataset_folder + "\\false", main_intersect_dataset_folder + "\\true"]
 
-# change its location
-ico.location = (0.0, 0.0, 0.0)
+for dir in dirs:
+    if not os.path.exists(dir):
+        os.makedirs(dir)
 
-index_list = []
-tracker_list = []
-mat_world = ico.matrix_world
-for v in bpy.context.active_object.data.vertices:
-#    pos_world = mat_world * v.co
-#    pos_world.z += 0.3
-#    v.co = mat_world.inverted() * pos_world
-    if random.random() > 0.5:
-        v.co[0] += random.random() * 0.7
-        v.co[1] += random.random() * 0.7
-        v.co[2] += random.random() * 0.7
-    print(detect_intersection(bpy.context.active_object))
+intersect_idx = 0
+no_intersect_idx = 0
+for i in range(num_of_iterations):
+    # create an ico sphere
+    bpy.ops.mesh.primitive_ico_sphere_add()
 
+    # newly created ico sphere will be automatically selected
+    ico = bpy.context.selected_objects[0]
+    ico.name = "ico"
 
-#bpy.ops.object.editmode_toggle()
+    # change its location
+    ico.location = (0.0, 0.0, 0.0)
 
-#bpy.ops.transform.translate(value=(-0.0635778, 0.323402, -0.197673), orient_type='GLOBAL', orient_matrix=((1, 0, 0), (0, 1, 0), (0, 0, 1)), 
-#                            orient_matrix_type='GLOBAL', mirror=True, use_proportional_edit=False, proportional_edit_falloff='SMOOTH', proportional_size=1, 
-#                            use_proportional_connected=False, use_proportional_projected=False)
-
-#bpy.ops.object.editmode_toggle()
+    mat_world = ico.matrix_world
+    for v in bpy.context.active_object.data.vertices:
+        if random.random() > 0.5:
+            v.co[0] += random.random() * 0.6
+            v.co[1] += random.random() * 0.6
+            v.co[2] += random.random() * 0.6
+    is_intersecting = len(detect_intersection(bpy.context.active_object)) > 0
+    if is_intersecting:
+        idx = intersect_idx
+        intersect_idx += 1
+    else:
+        idx = no_intersect_idx
+        no_intersect_idx += 1
+    save_obj_file(main_intersect_dataset_folder, is_intersecting, idx)
+    bpy.ops.object.delete()
