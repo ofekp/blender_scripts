@@ -41,6 +41,8 @@ def detect_intersection(obj):
     """
     found on:
     https://blenderartists.org/t/self-intersection-detection/671080
+    documentation of the intersection detection method
+    https://docs.blender.org/api/current/mathutils.bvhtree.html
     """
     if not obj.data.polygons:
         return array.array('i', ())
