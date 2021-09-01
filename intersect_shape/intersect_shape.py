@@ -27,6 +27,8 @@ import math
 from pathlib import Path
 import time
 import bmesh
+import json
+import re
 
 
 def strVector3( v3 ):
@@ -72,11 +74,11 @@ def generate_dataset(main_intersect_dataset_folder, examples_per_label=800, trai
     
     # check if some files already exist
     dirs = [main_intersect_dataset_folder + "\\false",
-        main_intersect_dataset_folder + "\\true",
-        main_intersect_dataset_folder + "\\false\\train",
-        main_intersect_dataset_folder + "\\false\\test",
-        main_intersect_dataset_folder + "\\true\\train",
-        main_intersect_dataset_folder + "\\true\\test"]
+            main_intersect_dataset_folder + "\\true",
+            main_intersect_dataset_folder + "\\false\\train",
+            main_intersect_dataset_folder + "\\false\\test",
+            main_intersect_dataset_folder + "\\true\\train",
+            main_intersect_dataset_folder + "\\true\\test"]
    
     for dir in dirs:
         if not os.path.exists(dir):
@@ -188,8 +190,117 @@ def select_intersecting_faces():
     bmesh.update_edit_mesh(me, True)
     
 
+def generate_intersecting_faces_list(obj):
+    face_indices = detect_intersection(obj)
+    print(face_indices)
+    me = obj.data
+    num_of_faces = len(me.polygons)
+    res = [1] * num_of_faces  # non intersecting
+    for face_index in face_indices:
+        res[face_index] = 2  # intersecting
+    return res
+
+
+def generate_face_mapping(from_obj, to_obj):
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = from_obj
+    bpy.ops.object.editmode_toggle()
+    from_obj_data = from_obj.data
+    from_bm = bmesh.from_edit_mesh(from_obj_data)
+    from_bm_face_centers = []
+    for face in from_bm.faces:
+        c = face.calc_center_median()
+        from_bm_face_centers.append(c)
+    
+    bpy.ops.object.editmode_toggle()
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = to_obj
+    bpy.ops.object.editmode_toggle()
+    to_obj_data = to_obj.data
+    to_bm = bmesh.from_edit_mesh(to_obj_data)
+    bvhtree = mathutils.bvhtree.BVHTree.FromBMesh(to_bm, epsilon=0.00001)
+    
+    mapping = []
+    for face_center in from_bm_face_centers:
+        pos, norm, idx, d = bvhtree.find_nearest(face_center)
+        if pos is not None: # is zero vector boolean False?
+            for to_face_idx, f in enumerate(to_bm.faces):
+                if f.index == idx:
+                    mapping.append(to_face_idx)
+                    break
+                to_face_idx += 1
+
+    bpy.ops.object.editmode_toggle()
+    return mapping
+
+
+# this was only made for debug purposes
+def generate_face_mapping_visualize_single_face_in_edit_mode(from_obj, to_obj):
+    bpy.ops.object.select_all(action='DESELECT')
+    bpy.context.view_layer.objects.active = from_obj
+    bpy.ops.object.editmode_toggle()
+    from_obj_data = from_obj.data
+    from_bm = bmesh.from_edit_mesh(from_obj_data)
+    for face in from_bm.faces:
+        face.select = False
+    for face in from_bm.faces:
+        face.select = True
+        c = face.calc_center_median()
+        bmesh.update_edit_mesh(from_obj_data, True)
+        time.sleep(5)
+        bpy.ops.object.editmode_toggle()
+        bpy.ops.object.select_all(action='DESELECT')
+        bpy.context.view_layer.objects.active = to_obj
+        bpy.ops.object.editmode_toggle()
+        to_obj_data = to_obj.data
+        to_bm = bmesh.from_edit_mesh(to_obj_data)
+        bvhtree = mathutils.bvhtree.BVHTree.FromBMesh(to_bm, epsilon=0.00001)
+        pos, norm, idx, d = bvhtree.find_nearest(c)
+        if pos is not None: # is zero vector boolean False?
+            for f in to_bm.faces:
+                f.select = f.index == idx
+            bmesh.update_edit_mesh(to_obj_data, True)
+        break
+    return ""
+
+
+def generate_segmentation_dataset_json_files(original_folder, maps_folder):
+    pathlist = Path(maps_folder).rglob('*.obj')
+    for path in pathlist:
+        maps_path_str = str(path)
+        orig_path_str = maps_path_str.replace(maps_folder, original_folder).replace("-0.obj", ".obj")
+        print(maps_path_str)
+        print(orig_path_str)
+        bpy.ops.import_scene.obj(filepath=maps_path_str)
+        maps_obj = bpy.context.selected_objects[0]
+        bpy.ops.import_scene.obj(filepath=orig_path_str)
+        orig_obj = bpy.context.selected_objects[0]
+        data = {
+            "raw_labels": generate_intersecting_faces_list(orig_obj),
+            "raw_to_sub": generate_face_mapping(orig_obj, maps_obj),
+            "sub_labels": generate_intersecting_faces_list(maps_obj),
+        }
+        print(data)
+#        with open(maps_path_str.replace(".obj", ".json"), 'w') as json_file:
+#            json_file.write(data)
+        break
+    
+    
+
 if __name__ == "__main__":
+    # classification dataset
 #    generate_dataset("D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapes")
 #    check_dataset("D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapes", remove_bad_files=False, is_assert=True)
 #    check_dataset("D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapes-MAPS-96-3", remove_bad_files=True, rename_files=False, is_assert=False)
-    select_intersecting_faces()
+
+    # segmentation dataset
+    # 1. generate a classification dataset
+    # 2. run datagen_maps.py on that dataset
+    # 3. run check_dataset and remove bad examples
+    # 4. run generate_segmentation_dataset_json_files
+    generate_segmentation_dataset_json_files("D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesSeg",
+                                             "D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesSeg-MAPS-96-3")
+    
+    # debug
+#    select_intersecting_faces()  # must be in edit mode
+#    print(generate_raw_labels())
