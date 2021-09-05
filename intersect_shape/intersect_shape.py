@@ -29,6 +29,29 @@ import time
 import bmesh
 import json
 import re
+import sys
+import shutil
+
+
+def install_requirements():
+    # this might require running Blender as administrator
+    # this did not really work (tried on Win10), I had to give write permissions to all users to python folder in
+    #   C:\Program Files\Blender Foundation\Blender 2.91\2.91\python
+    # then in windows' CMD:
+    #   cd "C:\Program Files\Blender Foundation\Blender 2.91\2.91\python\bin"
+    #   "C:\Program Files\Blender Foundation\Blender 2.91\2.91\python\bin\python" -m pip install tqdm
+    import subprocess
+    import ensurepip
+    print("---")
+    ensurepip.bootstrap()
+    pybin = sys.executable  # bpy.app.binary_path_python
+#    subprocess.check_call([pybin, '-m', 'pip', 'cache', 'purge'])
+#    subprocess.check_call([pybin, '-m', 'pip', 'install', '--upgrade', 'pip'])
+    subprocess.check_call([pybin, '-m', 'pip', '--version'])
+    subprocess.check_call([pybin, '-m', 'pip', 'install', 'tqdm'])
+
+#install_requirements()
+from tqdm import tqdm
 
 
 def strVector3( v3 ):
@@ -234,8 +257,10 @@ def generate_face_mapping(from_obj, to_obj):
     return mapping
 
 
-# this was only made for debug purposes
 def generate_face_mapping_visualize_single_face_in_edit_mode(from_obj, to_obj):
+    """
+    for DEBUG only
+    """
     bpy.ops.object.select_all(action='DESELECT')
     bpy.context.view_layer.objects.active = from_obj
     bpy.ops.object.editmode_toggle()
@@ -266,7 +291,7 @@ def generate_face_mapping_visualize_single_face_in_edit_mode(from_obj, to_obj):
 
 def generate_segmentation_dataset_json_files(original_folder, maps_folder):
     pathlist = Path(maps_folder).rglob('*.obj')
-    for path in pathlist:
+    for path in tqdm(pathlist):
         maps_path_str = str(path)
         orig_path_str = maps_path_str.replace(maps_folder, original_folder).replace("-0.obj", ".obj")
         print(maps_path_str)
@@ -281,10 +306,41 @@ def generate_segmentation_dataset_json_files(original_folder, maps_folder):
             "sub_labels": generate_intersecting_faces_list(maps_obj),
         }
         print(data)
-#        with open(maps_path_str.replace(".obj", ".json"), 'w') as json_file:
-#            json_file.write(data)
-        break
+        with open(maps_path_str.replace(".obj", ".json"), 'w') as json_file:
+            json.dump(data, json_file)
+        bpy.ops.object.select_all(action='SELECT')
+        bpy.ops.object.delete()
+        
+        
+def arragne_folder_structure_for_segmentation(original_folder, maps_folder, target_folder, dataset_name):
+    # check if some files already exist
+    dirs = [target_folder,
+            target_folder + "\\train",
+            target_folder + "\\train\\" + dataset_name,
+            target_folder + "\\test",
+            target_folder + "\\test\\" + dataset_name,
+            target_folder + "\\raw"]
+    for dir in dirs:
+        if not os.path.exists(dir):
+            os.makedirs(dir)
     
+    pathlist = Path(maps_folder).rglob(r'*.obj')
+    for path in tqdm(pathlist):
+        path_str = str(path)
+        is_train = "train" in path_str
+        is_intersecting = "true" in path_str
+        file_name = "{}_{}_{:04d}-0.obj".format(("train" if is_train else "test"), ("intersecting" if is_intersecting else "not_intersecting"), int(path.name.split('-')[0]))
+        target_path = target_folder + "\\" + ("train" if is_train else "test") + "\\" + dataset_name + "\\" + file_name
+#        original_file = original_folder + "\\" + str(is_intersecting).lower() + "\\" + ("train" if is_train else "test") + "\\" + path.name.split('-')[0] + ".obj"
+        original_file = maps_folder + "\\" + str(is_intersecting).lower() + "\\" + ("train" if is_train else "test") + "\\" + path.name.split('-')[0] + "-0.obj"
+        raw_file = target_folder + "\\raw\\" + ("train" if is_train else "test") + "_" + ("intersecting" if is_intersecting else "not_intersecting") + "_" + "{:04d}".format(int(path.name.split('-')[0])) + ".obj"
+#        print("[{}] --> [{}]".format(original_file, raw_file))
+#        print("[{}] --> [{}]".format(path_str, target_path))
+#        print("[{}] --> [{}]".format(path_str.replace("obj", "json"), target_path.replace("obj", "json")))
+#        break
+        shutil.copy(original_file, raw_file)
+        shutil.copy(path_str, target_path)
+        shutil.copy(path_str.replace("obj", "json"), target_path.replace("obj", "json"))
     
 
 if __name__ == "__main__":
@@ -298,9 +354,15 @@ if __name__ == "__main__":
     # 2. run datagen_maps.py on that dataset
     # 3. run check_dataset and remove bad examples
     # 4. run generate_segmentation_dataset_json_files
-    generate_segmentation_dataset_json_files("D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesSeg",
-                                             "D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesSeg-MAPS-96-3")
+#    generate_segmentation_dataset_json_files("D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesSeg",
+#                                             "D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesSeg-MAPS-96-3")
+    # 5. rearrange the folder structure to fit segmentation dataset
+    arragne_folder_structure_for_segmentation("D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesSeg",  # not used
+                                              "D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesSeg-MAPS-96-3",
+                                              "D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesSegmentation-MAPS-96-3",
+                                              "icosphere")
+
     
-    # debug
+    # DEBUG
 #    select_intersecting_faces()  # must be in edit mode
 #    print(generate_raw_labels())
