@@ -61,7 +61,7 @@ def strVector3( v3 ):
 def save_obj_file(main_intersect_dataset_folder, is_intersecting_faces, is_train, idx):
     blend_file_path = main_intersect_dataset_folder + "\\" + str(is_intersecting_faces) + "\\" + ("train" if is_train else "test") + "\\"
     file_path = os.path.dirname(blend_file_path)
-    target_file = os.path.join(file_path, "{:03d}.obj".format(idx))
+    target_file = os.path.join(file_path, "{:04d}.obj".format(idx))
     bpy.ops.export_scene.obj(filepath=target_file, use_materials=False)
     
 
@@ -215,7 +215,6 @@ def select_intersecting_faces():
 
 def generate_intersecting_faces_list(obj):
     face_indices = detect_intersection(obj)
-    print(face_indices)
     me = obj.data
     num_of_faces = len(me.polygons)
     res = [1] * num_of_faces  # non intersecting
