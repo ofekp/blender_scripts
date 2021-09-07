@@ -62,11 +62,11 @@ def save_obj_file(main_intersect_dataset_folder, is_intersecting_faces, is_train
     blend_file_path = main_intersect_dataset_folder + "\\" + str(is_intersecting_faces) + "\\" + ("train" if is_train else "test") + "\\"
     file_path = os.path.dirname(blend_file_path)
     target_file = os.path.join(file_path, "{:04d}.obj".format(idx))
-    bpy.ops.export_scene.obj(filepath=target_file, use_materials=False)
+    bpy.ops.export_scene.obj(filepath=target_file, use_materials=False, keep_vertex_order=True)
     
 
 def load_obj_file(filepath):
-    bpy.ops.import_scene.obj(filepath=filepath)
+    bpy.ops.import_scene.obj(filepath=filepath, split_mode='OFF')
     return bpy.context.selected_objects[0]
 
 
@@ -292,9 +292,8 @@ def generate_segmentation_dataset_json_files(original_folder, maps_folder):
     pathlist = Path(maps_folder).rglob('*.obj')
     for path in tqdm(pathlist):
         maps_path_str = str(path)
-        orig_path_str = maps_path_str.replace(maps_folder, original_folder).replace("-0.obj", ".obj")
-        print(maps_path_str)
-        print(orig_path_str)
+#        orig_path_str = maps_path_str.replace(maps_folder, original_folder).replace("-0.obj", ".obj")
+        orig_path_str = maps_path_str  # use this when the original object should be identical to the remeshed object
         bpy.ops.import_scene.obj(filepath=maps_path_str)
         maps_obj = bpy.context.selected_objects[0]
         bpy.ops.import_scene.obj(filepath=orig_path_str)
@@ -304,7 +303,6 @@ def generate_segmentation_dataset_json_files(original_folder, maps_folder):
             "raw_to_sub": generate_face_mapping(orig_obj, maps_obj),
             "sub_labels": generate_intersecting_faces_list(maps_obj),
         }
-        print(data)
         with open(maps_path_str.replace(".obj", ".json"), 'w') as json_file:
             json.dump(data, json_file)
         bpy.ops.object.select_all(action='SELECT')
@@ -342,26 +340,102 @@ def arragne_folder_structure_for_segmentation(original_folder, maps_folder, targ
         shutil.copy(path_str.replace("obj", "json"), target_path.replace("obj", "json"))
     
 
+def add_empty(location):
+    bpy.ops.object.empty_add(type='PLAIN_AXES', align='WORLD', location=(0, 0, 0), scale=(1, 1, 1))
+    bpy.ops.transform.resize(value=(0.01, 0.01, 0.01), orient_type='LOCAL', orient_matrix=((1, 0, 0), (0, 1, 0), (0, 0, 1)), orient_matrix_type='GLOBAL', mirror=True, use_proportional_edit=False, proportional_edit_falloff='SMOOTH', proportional_size=1, use_proportional_connected=False, use_proportional_projected=False)
+    bpy.ops.transform.translate(value=tuple(location), orient_type='GLOBAL', orient_matrix=((1, 0, 0), (0, 1, 0), (0, 0, 1)), orient_matrix_type='GLOBAL', mirror=True, use_proportional_edit=False, proportional_edit_falloff='SMOOTH', proportional_size=1, use_proportional_connected=False, use_proportional_projected=False)
+
+
+def convert_to_ply(raw_obj_folder):
+    pathlist = Path(raw_obj_folder).rglob(r'*.obj')
+    for path in tqdm(pathlist):
+        path_str = str(path)
+        obj = load_obj_file(path_str)
+        # save as ply to the same folder
+        bpy.ops.export_mesh.ply(filepath=path_str.replace(".obj", ".ply"))
+        shutil.move(path_str, path_str.replace("\\raw", "\\raw\\objs"))
+        bpy.ops.object.delete()
+
+
+def visualize_trimesh_load():
+    """
+    for DEBUG only
+    """
+    import trimesh
+    from mathutils import Vector
+    obj_path = "D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesOrderedSegmentationFinal-MAPS-96-3\\train\\icosphere\\train_intersecting_0011-0.obj"
+    obj = load_obj_file(obj_path)
+    intersecting_faces = detect_intersection(obj)
+    
+#    bpy.ops.object.select_all(action='DESELECT')
+#    bpy.context.view_layer.objects.active = obj
+#    bpy.ops.object.editmode_toggle()
+#    obj_data = obj.data
+#    obj_bm = bmesh.from_edit_mesh(obj_data)
+#    face_centers = []
+#    for face in obj_bm.faces:
+#        face.select = False
+#    for idx, face in enumerate(obj_bm.faces):
+#        if idx in intersecting_faces:
+#            face.select = True
+#            face_center = face.calc_center_median()
+#            print(face_center)
+#            face_centers.append(face_center)
+#    bpy.ops.object.editmode_toggle()
+#    for face_center in face_centers:
+#        add_empty(obj.matrix_world @ Vector(face_center))
+
+    
+#    for idx, face in enumerate(obj.data.polygons):
+#        if idx in intersecting_faces:
+#            face_center = face.center
+#            add_empty(obj.matrix_world @ Vector(face_center))
+
+
+#    mesh = trimesh.load_mesh(obj_path, process=False)
+##    mesh = trimesh.load(obj_path, process=False, maintain_order=True)
+#    for idx, face in enumerate(mesh.faces):
+#        if idx in intersecting_faces:
+#            face_center = mesh.vertices[face].mean(axis=0)
+#            print("tirmesh [{}] obj [{}]".format(face_center, obj.data.polygons[idx].center))
+#            print("world trimesh [{}] world obj [{}]".format(obj.matrix_world @ Vector(face_center), obj.matrix_world @ obj.data.polygons[idx].center))
+#            add_empty(obj.matrix_world @ Vector(face_center))
+
+
 if __name__ == "__main__":
     # classification dataset
-#    generate_dataset("D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapes")
-#    check_dataset("D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapes", remove_bad_files=False, is_assert=True)
-#    check_dataset("D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapes-MAPS-96-3", remove_bad_files=True, rename_files=False, is_assert=False)
+#    generate_dataset("D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesOrdered")
+#    check_dataset("D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesOrdered", remove_bad_files=False, is_assert=True)
+    # go to anaconda
+    #   D:
+    #   cd "D:\TAU MSc\Semester 4\Thesis\Intersections\SubdivNet"
+    #   conda activate subdivnet
+    #   in subdivnet code modify the script "datagen_maps.py" according to the dataset
+    #   python datagen_maps.py
+#    check_dataset("D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesOrdered-MAPS-96-3", remove_bad_files=False, rename_files=False, is_assert=True)
+    # if there are any reasonable number of bad shapes, remove them with the following line
+#    check_dataset("D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesOrdered-MAPS-96-3", remove_bad_files=True, rename_files=False, is_assert=False)
 
     # segmentation dataset
-    # 1. generate a classification dataset
-    # 2. run datagen_maps.py on that dataset
-    # 3. run check_dataset and remove bad examples
-    # 4. run generate_segmentation_dataset_json_files
-#    generate_segmentation_dataset_json_files("D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesSeg",
-#                                             "D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesSeg-MAPS-96-3")
-    # 5. rearrange the folder structure to fit segmentation dataset
-    arragne_folder_structure_for_segmentation("D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesSeg",  # not used
-                                              "D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesSeg-MAPS-96-3",
-                                              "D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesSegmentation-MAPS-96-3",
-                                              "icosphere")
+    # generate a classification dataset using the steps above
+    # copy that datset to another folder for segmentation
+#    generate_segmentation_dataset_json_files("D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesOrderedSegmentation-MAPS-96-3",
+#                                             "D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesOrderedSegmentation-MAPS-96-3")
+#    arragne_folder_structure_for_segmentation("D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesSeg",  # not used
+#                                              "D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesOrderedSegmentation-MAPS-96-3",
+#                                              "D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesOrderedSegmentationFinal-MAPS-96-3",
+#                                              "icosphere")
 
+
+    convert_to_ply("D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesOrderedSegmentationFinal-MAPS-96-3\\raw\\")
     
     # DEBUG
 #    select_intersecting_faces()  # must be in edit mode
 #    print(generate_raw_labels())
+
+#    import trimesh
+##    obj_path = "D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\results\\HumanBody\\gt-6.ply"
+##    obj_path = "D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\intersect_shape_tmp.ply"
+#    obj_path = "D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesOrderedSegmentationFinal-MAPS-96-3\\raw\\test_intersecting_0000.ply"
+#    mesh = trimesh.load_mesh(obj_path, process=False)
+#    print(mesh.visual.face_colors[:5, :3])
