@@ -427,7 +427,28 @@ if __name__ == "__main__":
 #                                              "icosphere")
 
 
-    convert_to_ply("D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesOrderedSegmentationFinal-MAPS-96-3\\raw\\")
+#    convert_to_ply("D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\data\\IntersectShapesOrderedSegmentationFinal-MAPS-96-3\\raw\\")
+
+
+    # based on https://blender.stackexchange.com/questions/30314/file-format-with-per-face-colors
+    import trimesh
+#    obj_path = "D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\results\\HumanBody\\gt-11.ply"
+#    obj_path = "D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\results\\IntersectShapesOrderedSegmentationFinal\\pred-test_intersecting_01.ply"
+#    obj_path = "D:\\TAU MSc\\Semester 4\\Thesis\\Intersections\\SubdivNet\\results\\IntersectShapesOrderedSegmentationFinal\\pred-test_intersecting_00.ply"
+    bpy.ops.import_mesh.ply(filepath=obj_path)
+    obj = bpy.context.selected_objects[0]
+    if not obj.data.vertex_colors:
+        # creates one 'Col' by default
+        obj.data.vertex_colors.new()
+    color_layer = obj.data.vertex_colors['Col']
+    
+    mesh = trimesh.load_mesh(obj_path, process=False)
+    i = 0
+    for idx, color in enumerate(mesh.visual.face_colors):
+        verts = mesh.faces[idx]
+        for vert in verts:
+            color_layer.data[i].color = color[:4] / 255
+            i += 1
     
     # DEBUG
 #    select_intersecting_faces()  # must be in edit mode
